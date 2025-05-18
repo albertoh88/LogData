@@ -74,7 +74,7 @@ class Service:
             raise HTTPException(status_code=401, detail="Invalid token")
 
     def validar_clave_publica(self, pem_str: str):
-        """ Valida que la clave pública tenga formato PEM correcto y sea una clave RSA válida."""
+        """ Validar que la clave pública tenga formato PEM correcto y sea un RSA válido."""
         if not pem_str.startswith('-----BEGIN CERTIFICATE-----') or not pem_str.endswith('-----END CERTIFICATE-----'):
             raise HTTPException(status_code=400, detail="Formato PEM incorrecto.")
 
@@ -100,10 +100,24 @@ class Service:
         )
         return company_id
 
+    def send_email_to_support_team(self, log_data, email):
+        pass
+
+    def send_critical_alert(self, log_data, company_name):
+        obj = self.nosql.obtener_company(company_name)
+        for email in obj['alert_emails']:
+            self.send_email_to_support_team(log_data, email)
+
+        pass
+
+    def notify_on_slack(self, log_data):
+        pass
+
 
     def process_log(self, log_data: dict, company_name: str):
         self.nosql.store_log_in_db(log_data, company_name)
-        # send_critical_alert(log_data)
-        # notify_on_slack(log_data)
-        # send_email_to_support_team(log_data)
-        print(log_data)
+        if log_data['level'] == 'ERROR':
+            self.send_critical_alert(log_data, company_name)
+            self.notify_on_slack(log_data)
+            return {'message': 'Log guardado y mensaje enviado para soporte'}
+        return {'message': 'Log guardado'}
