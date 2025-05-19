@@ -101,7 +101,14 @@ class Service:
         return company_id
 
     def send_email_to_support_team(self, log_data, email):
-        pass
+        msg = EmailMessage()
+        msg['Subject'] = 'Alerta Crítica - Error Grave Detectado.'
+        msg['From'] = config('SENDER_MAIL')
+        msg['To'] = email
+        msg.set_content(log_data)
+
+        with smtplib.SMTP('smtp.gmail.com', 465) as smtp:
+            smtp.send_message(msg)
 
     def send_critical_alert(self, log_data, company_name):
         obj = self.nosql.obtener_company(company_name)
@@ -110,14 +117,15 @@ class Service:
 
         pass
 
-    def notify_on_slack(self, log_data):
-        pass
+    # def notify_on_slack(self, log_data):
+    #     pass
 
 
     def process_log(self, log_data: dict, company_name: str):
         self.nosql.store_log_in_db(log_data, company_name)
         if log_data['level'] == 'ERROR':
             self.send_critical_alert(log_data, company_name)
-            self.notify_on_slack(log_data)
+            # self.notify_on_slack(log_data)
             return {'message': 'Log guardado y mensaje enviado para soporte'}
         return {'message': 'Log guardado'}
+    
