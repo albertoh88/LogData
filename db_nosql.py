@@ -73,3 +73,13 @@ class Nosql:
                                    'received_at': datetime.now()})
         except Exception as e:
             raise e
+
+    def search_log_in_db(self, data):
+        try:
+            client = self.conn.connection_nosql()
+            db = client[config('BD')]
+            collection = db[config('COLLECTION_LOGS')]
+            result = list(collection.find(data))
+            return result
+        except Exception as e:
+            raise e

@@ -26,15 +26,28 @@ class Service:
         token = jwt.encode(payload, config('SECRET_KEY'), config('ALGORITHM'))
         return token
 
-    def send_email_register(self, email, token: str):
+    def send_email(self, subject, destinatario, contenido_text, remitente, psw, **options):
         msg = EmailMessage()
-        msg['Subject'] = 'Tu token de registro'
-        msg['From'] = '<EMAIL>'
-        msg['To'] = email
-        msg.set_content(f'Token de verificación es:\n\n{token}\n\nVálido por 15 minutos.')
+        msg['Subject'] = subject
+        msg['From'] = remitente
+        msg['To'] = destinatario
+
+        if 'contenido_html' in options:
+            msg.set_content(contenido_text)
+            msg.add_alternative(options['registro'], subtype='html')
+        else:
+            msg.set_content(contenido_text)
 
         with smtplib.SMTP('smtp.gmail.com', 465) as smtp:
+            smtp.login(remitente, psw)
             smtp.send_message(msg)
+
+    def send_email_register(self, email, token: str):
+        self.send_email(subject='Tu token de registro',
+                        destinatario=email,
+                        contenido_text=f'Token de verificación es:\n\n{token}\n\nVálido por 15 minutos.',
+                        remitente=config('SENDER_MAIL'),
+                        psw=config('PASSWORD'),)
 
     def verify_token_register(self, token):
         try:
@@ -87,7 +100,6 @@ class Service:
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Clave pública inválida: {str(e)}")
 
-
     def register_company(self, data):
         # Validar formato y contenido de la clave
         self.validar_clave_publica(data['company_public_key'])
@@ -100,32 +112,42 @@ class Service:
         )
         return company_id
 
-    def send_email_to_support_team(self, log_data, email):
-        msg = EmailMessage()
-        msg['Subject'] = 'Alerta Crítica - Error Grave Detectado.'
-        msg['From'] = config('SENDER_MAIL')
-        msg['To'] = email
-        msg.set_content(log_data)
-
-        with smtplib.SMTP('smtp.gmail.com', 465) as smtp:
-            smtp.send_message(msg)
-
     def send_critical_alert(self, log_data, company_name):
         obj = self.nosql.obtener_company(company_name)
         for email in obj['alert_emails']:
-            self.send_email_to_support_team(log_data, email)
-
-        pass
-
-    # def notify_on_slack(self, log_data):
-    #     pass
-
+            self.send_email(
+                subject='Alerta Crítica - Error Grave Detectado.',
+                destinatario=email,
+                contenido_text=log_data,
+                remitente=config('SENDER_MAIL'),
+                psw=config('PASSWORD'),
+            )
 
     def process_log(self, log_data: dict, company_name: str):
         self.nosql.store_log_in_db(log_data, company_name)
         if log_data['level'] == 'ERROR':
             self.send_critical_alert(log_data, company_name)
-            # self.notify_on_slack(log_data)
             return {'message': 'Log guardado y mensaje enviado para soporte'}
         return {'message': 'Log guardado'}
+
+    def consultar_logs_con_filtros(self, data: dict):
+        query = {}
+
+        if 'empresa_id' in data:
+            query['empresa_id'] = data['empresa_id']
+        if 'nivel' in data:
+            query['level'] = data['nivel']
+        if 'usuario' in data:
+            query['user.name'] = data['usuario']
+        if 'tags' in data:
+            query['tags'] = {'$in': data['tags']}
+        if 'fecha_inicio' in data and 'fecha_fin' in data:
+            query['timestamp'] = {
+                '$gte': data['fecha_inicio'],
+                '$lte': data['fecha_fin']
+            }
+
+        result = self.nosql.search_log_in_db(query)
+
+        return result
     

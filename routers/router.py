@@ -1,10 +1,22 @@
 from services import Service
 from pydantic import BaseModel, EmailStr
+from typing import Optional, List
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 
 
 router = APIRouter()
 service = Service()
+
+
+class RegisterRequestSchema(BaseModel):
+    email: EmailStr
+
+class CompanyRegisterSchema(BaseModel):
+    token: str
+    company_name: str
+    company_public_key: str  # PEM como texto, no como `bytes`
+    alert_emails: list[EmailStr]  # Lista de correos válidos
 
 # Validar el cuerpo del log con Pydantic
 class LogSchema(BaseModel):
@@ -17,14 +29,26 @@ class LogSchema(BaseModel):
     message: str
     tags: list
 
-class CompanyRegisterSchema(BaseModel):
-    token: str
-    company_name: str
-    company_public_key: str  # PEM como texto, no como `bytes`
-    alert_emails: list[EmailStr]  # Lista de correos válidos
+class LogItem(BaseModel):
+    timestamp: Optional[str]
+    host: Optional[str]
+    service: Optional[str]
+    level: Optional[str]
+    event: Optional[dict]
+    user: Optional[dict]
+    message: Optional[str]
+    tags: Optional[List[str]]
 
-class RegisterRequestSchema(BaseModel):
-    email: EmailStr
+class LogResponse(BaseModel):
+    logs: List[LogItem]
+
+class LogSearchRequest(BaseModel):
+    empresa_id: Optional[str]
+    nivel: Optional[str]
+    usuario: Optional[str]
+    fecha_inicio: Optional[datetime]
+    fecha_fin: Optional[datetime]
+    tags: Optional[List[str]]
 
 @router.post('/solicitar_register')
 def solicitar_register(data: RegisterRequestSchema):
@@ -51,3 +75,12 @@ def recibir_logs(log: LogSchema, payload=Depends(service.verify_token_logs)):
         return {'message': 'Log recibido con éxito', 'empresa': company_name}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post('/logs/search', response_model=LogResponse)
+def search_logs(request: LogSearchRequest, payload=Depends(service.verify_token_logs)):
+    try:
+        filtros = request.dict(exclude_none=True)
+        logs = service.consultar_logs_con_filtros(filtros)
+        return {'logs': logs}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f'Error buscando logs: {str(e)}')
