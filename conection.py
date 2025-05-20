@@ -6,7 +6,8 @@ class Connection:
     def __init__(self):
         pass
 
-    def connection_nosql(self):
+    @staticmethod
+    def connection_nosql():
         try:
             cliente = MongoClient(host=config('NOSQL_HOST'),
                               port=int(config('NOSQL_PORT')))

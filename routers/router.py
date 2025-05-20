@@ -79,7 +79,7 @@ def recibir_logs(log: LogSchema, payload=Depends(service.verify_token_logs)):
 @router.post('/logs/search', response_model=LogResponse)
 def search_logs(request: LogSearchRequest, payload=Depends(service.verify_token_logs)):
     try:
-        filtros = request.dict(exclude_none=True)
+        filtros = request.model_dump(exclude_none=True)
         logs = service.consultar_logs_con_filtros(filtros)
         return {'logs': logs}
     except Exception as e:

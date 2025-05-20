@@ -4,7 +4,7 @@ import uuid
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
 from email.message import EmailMessage
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from db_nosql import Nosql
 from decouple import config
 from fastapi import HTTPException, Depends
@@ -16,8 +16,9 @@ class Service:
     def __init__(self):
         self.nosql = Nosql()
 
-    def generar_token_registro(self, email):
-        exp = datetime.utcnow() + timedelta(minutes=15)
+    @staticmethod
+    def generar_token_registro(email):
+        exp = datetime.now(timezone.utc)  + timedelta(minutes=15)
         payload = {
             'email': email,
             'purpose': 'register_company',
@@ -26,7 +27,8 @@ class Service:
         token = jwt.encode(payload, config('SECRET_KEY'), config('ALGORITHM'))
         return token
 
-    def send_email(self, subject, destinatario, contenido_text, remitente, psw, **options):
+    @staticmethod
+    def send_email(subject, destinatario, contenido_text, remitente, psw, **options):
         msg = EmailMessage()
         msg['Subject'] = subject
         msg['From'] = remitente
@@ -49,7 +51,8 @@ class Service:
                         remitente=config('SENDER_MAIL'),
                         psw=config('PASSWORD'),)
 
-    def verify_token_register(self, token):
+    @staticmethod
+    def verify_token_register(token):
         try:
             payload = jwt.decode(token, config('SECRET_KEY'), config('ALGORITHM'))
             if payload.get('purpose') != 'register_company':
@@ -86,7 +89,8 @@ class Service:
         except jwt.InvalidTokenError:
             raise HTTPException(status_code=401, detail="Invalid token")
 
-    def validar_clave_publica(self, pem_str: str):
+    @staticmethod
+    def validar_clave_publica(pem_str: str):
         """ Validar que la clave pública tenga formato PEM correcto y sea un RSA válido."""
         if not pem_str.startswith('-----BEGIN CERTIFICATE-----') or not pem_str.endswith('-----END CERTIFICATE-----'):
             raise HTTPException(status_code=400, detail="Formato PEM incorrecto.")
