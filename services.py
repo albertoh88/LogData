@@ -17,7 +17,7 @@ class Service:
         self.nosql = Nosql()
 
     @staticmethod
-    def generar_token_registro(email):
+    def generate_registration_token(email):
         exp = datetime.now(timezone.utc)  + timedelta(minutes=15)
         payload = {
             'email': email,
@@ -28,31 +28,31 @@ class Service:
         return token
 
     @staticmethod
-    def send_email(subject, destinatario, contenido_text, remitente, psw, **options):
+    def send_email(subject, addressee, content_text, sender, psw, **options):
         msg = EmailMessage()
         msg['Subject'] = subject
-        msg['From'] = remitente
-        msg['To'] = destinatario
+        msg['From'] = sender
+        msg['To'] = addressee
 
-        if 'contenido_html' in options:
-            msg.set_content(contenido_text)
-            msg.add_alternative(options['registro'], subtype='html')
+        if 'content_html' in options:
+            msg.set_content(content_text)
+            msg.add_alternative(options['register'], subtype='html')
         else:
-            msg.set_content(contenido_text)
+            msg.set_content(content_text)
 
         with smtplib.SMTP('smtp.gmail.com', 465) as smtp:
-            smtp.login(remitente, psw)
+            smtp.login(sender, psw)
             smtp.send_message(msg)
 
-    def send_email_register(self, email, token: str):
+    def send_registration_email(self, email, token: str):
         self.send_email(subject='Tu token de registro',
-                        destinatario=email,
-                        contenido_text=f'Token de verificación es:\n\n{token}\n\nVálido por 15 minutos.',
-                        remitente=config('SENDER_MAIL'),
-                        psw=config('PASSWORD'),)
+                        addressee=email,
+                        content_text=f'Token de verificación es:\n\n{token}\n\nVálido por 15 minutos.',
+                        sender=config('SENDER_MAIL'),
+                        psw=config('PASSWORD'))
 
     @staticmethod
-    def verify_token_register(token):
+    def verify_registration_token(token):
         try:
             payload = jwt.decode(token, config('SECRET_KEY'), config('ALGORITHM'))
             if payload.get('purpose') != 'register_company':
@@ -63,7 +63,7 @@ class Service:
         except jwt.InvalidTokenError:
             raise HTTPException(status_code=401, detail='Invalid token')
 
-    def verify_token_logs(self, credentials=Depends(seguridad)):
+    def verify_logs_token(self, credentials=Depends(seguridad)):
         token = credentials.credentials
         try:
             # Obtener el payload sin verificar la firma
@@ -90,7 +90,7 @@ class Service:
             raise HTTPException(status_code=401, detail="Invalid token")
 
     @staticmethod
-    def validar_clave_publica(pem_str: str):
+    def validate_public_key(pem_str: str):
         """ Validar que la clave pública tenga formato PEM correcto y sea un RSA válido."""
         if not pem_str.startswith('-----BEGIN CERTIFICATE-----') or not pem_str.endswith('-----END CERTIFICATE-----'):
             raise HTTPException(status_code=400, detail="Formato PEM incorrecto.")
@@ -104,9 +104,9 @@ class Service:
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Clave pública inválida: {str(e)}")
 
-    def register_company(self, data):
+    def registered_company(self, data):
         # Validar formato y contenido de la clave
-        self.validar_clave_publica(data['company_public_key'])
+        self.validate_public_key(data['company_public_key'])
         company_id = str(uuid.uuid4())
         self.nosql.store_company_in_db(
             company_id=company_id,
@@ -117,13 +117,13 @@ class Service:
         return company_id
 
     def send_critical_alert(self, log_data, company_name):
-        obj = self.nosql.obtener_company(company_name)
+        obj = self.nosql.get_company(company_name)
         for email in obj['alert_emails']:
             self.send_email(
                 subject='Alerta Crítica - Error Grave Detectado.',
-                destinatario=email,
-                contenido_text=log_data,
-                remitente=config('SENDER_MAIL'),
+                addressee=email,
+                content_text=log_data,
+                sender=config('SENDER_MAIL'),
                 psw=config('PASSWORD'),
             )
 
@@ -134,7 +134,7 @@ class Service:
             return {'message': 'Log guardado y mensaje enviado para soporte'}
         return {'message': 'Log guardado'}
 
-    def consultar_logs_con_filtros(self, data: dict):
+    def consult_filtered_logs(self, data: dict):
         query = {}
 
         if 'empresa_id' in data:

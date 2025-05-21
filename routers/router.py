@@ -19,13 +19,25 @@ class CompanyRegisterSchema(BaseModel):
     alert_emails: list[EmailStr]  # Lista de correos válidos
 
 # Validar el cuerpo del log con Pydantic
+class EventShema(BaseModel):
+    action: str
+    category: str
+    outcome: str
+    reason: Optional[str]
+
+class UserShema(BaseModel):
+    id: str
+    name: str
+    ip: str
+    agent: str
+
 class LogSchema(BaseModel):
     timestamp: str
     host: str
     service: str
     level: str
-    event: dict
-    user: dict
+    event: EventShema
+    user: UserShema
     message: str
     tags: list
 
@@ -34,8 +46,8 @@ class LogItem(BaseModel):
     host: Optional[str]
     service: Optional[str]
     level: Optional[str]
-    event: Optional[dict]
-    user: Optional[dict]
+    event: Optional[EventShema]
+    user: Optional[UserShema]
     message: Optional[str]
     tags: Optional[List[str]]
 
@@ -43,24 +55,24 @@ class LogResponse(BaseModel):
     logs: List[LogItem]
 
 class LogSearchRequest(BaseModel):
-    empresa_id: Optional[str]
-    nivel: Optional[str]
-    usuario: Optional[str]
-    fecha_inicio: Optional[datetime]
-    fecha_fin: Optional[datetime]
+    company_id: Optional[str]
+    level: Optional[str]
+    user: Optional[str]
+    start_date: Optional[datetime]
+    end_date: Optional[datetime]
     tags: Optional[List[str]]
 
-@router.post('/solicitar_register')
-def solicitar_register(data: RegisterRequestSchema):
-    token = service.generar_token_registro(data.email)
-    service.send_email_register(data.email, token)
+@router.post('/request_registration')
+def request_registration(data: RegisterRequestSchema):
+    token = service.generate_registration_token(data.email)
+    service.send_registration_email(data.email, token)
     return {'message': 'Se ha enviado un token temporal a tu correo.'}
 
-@router.post("/register_company")
-def register_company(data: CompanyRegisterSchema):
+@router.post("/registered_company")
+def registered_company(data: CompanyRegisterSchema):
     try:
-        service.verify_token_register(data.token)
-        company_id = service.register_company(data)
+        service.verify_registration_token(data.token)
+        company_id = service.registered_company(data)
         return {'message': 'Empresa registrada con éxito', 'company_id': company_id}
     except HTTPException:
         raise
@@ -68,7 +80,7 @@ def register_company(data: CompanyRegisterSchema):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/logs")
-def recibir_logs(log: LogSchema, payload=Depends(service.verify_token_logs)):
+def receive_logs(log: LogSchema, payload=Depends(service.verify_logs_token)):
     try:
         company_name = payload['iss']
         service.process_log(log.model_dump(), company_name)
@@ -77,10 +89,10 @@ def recibir_logs(log: LogSchema, payload=Depends(service.verify_token_logs)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post('/logs/search', response_model=LogResponse)
-def search_logs(request: LogSearchRequest, payload=Depends(service.verify_token_logs)):
+def search_logs(request: LogSearchRequest, payload=Depends(service.verify_logs_token)):
     try:
-        filtros = request.model_dump(exclude_none=True)
-        logs = service.consultar_logs_con_filtros(filtros)
+        filters = request.model_dump(exclude_none=True)
+        logs = service.consult_filtered_logs(filters)
         return {'logs': logs}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f'Error buscando logs: {str(e)}')

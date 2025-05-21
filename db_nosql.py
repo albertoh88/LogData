@@ -47,7 +47,7 @@ class Nosql:
         except Exception as e:
             raise e
 
-    def obtener_company(self, company_name):
+    def get_company(self, company_name):
         try:
             cliente = self.conn.connection_nosql()
             db = cliente[config('BD')]
@@ -65,7 +65,7 @@ class Nosql:
             db = client[config('BD')]
             collection = db[config('COLLECTION_LOGS')]
 
-            company = self.obtener_company(company_name)
+            company = self.get_company(company_name)
 
             collection.insert_one({'company_id': company['company_id'],
                                    'company_name': company_name,
