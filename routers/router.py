@@ -15,10 +15,10 @@ class RegisterRequestSchema(BaseModel):
 class CompanyRegisterSchema(BaseModel):
     token: str
     company_name: str
-    company_public_key: str  # PEM como texto, no como `bytes`
-    alert_emails: list[EmailStr]  # Lista de correos válidos
+    company_public_key: str  # PEM format as text
+    alert_emails: list[EmailStr]  # List of valid emails
 
-# Validar el cuerpo del log con Pydantic
+# Log structure schema
 class EventShema(BaseModel):
     action: str
     category: str
@@ -62,18 +62,19 @@ class LogSearchRequest(BaseModel):
     end_date: Optional[datetime]
     tags: Optional[List[str]]
 
+# Endpoints
 @router.post('/request_registration')
 def request_registration(data: RegisterRequestSchema):
     token = service.generate_registration_token(data.email)
     service.send_registration_email(data.email, token)
-    return {'message': 'Se ha enviado un token temporal a tu correo.'}
+    return {'message': 'A temporary registration email has been sent to your email.'}
 
-@router.post("/registered_company")
-def registered_company(data: CompanyRegisterSchema):
+@router.post("/register_company")
+def register_company(data: CompanyRegisterSchema):
     try:
         service.verify_registration_token(data.token)
-        company_id = service.registered_company(data)
-        return {'message': 'Empresa registrada con éxito', 'company_id': company_id}
+        company_id = service.register_company(data)
+        return {'message': 'Company successfully registered', 'company_id': company_id}
     except HTTPException:
         raise
     except Exception as e:
@@ -84,7 +85,7 @@ def receive_logs(log: LogSchema, payload=Depends(service.verify_logs_token)):
     try:
         company_name = payload['iss']
         service.process_log(log.model_dump(), company_name)
-        return {'message': 'Log recibido con éxito', 'empresa': company_name}
+        return {'message': 'Log successfully received', 'company': company_name}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -95,4 +96,4 @@ def search_logs(request: LogSearchRequest, payload=Depends(service.verify_logs_t
         logs = service.consult_filtered_logs(filters)
         return {'logs': logs}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f'Error buscando logs: {str(e)}')
+        raise HTTPException(status_code=500, detail=f'Error while searching logs: {str(e)}')

@@ -24,7 +24,7 @@ class Service:
             'purpose': 'register_company',
             'exp': exp
         }
-        token = jwt.encode(payload, config('SECRET_KEY'), config('ALGORITHM'))
+        token = jwt.encode(payload, config('SECRET_KEY'), algorithm='HS256')
         return token
 
     @staticmethod
@@ -45,9 +45,9 @@ class Service:
             smtp.send_message(msg)
 
     def send_registration_email(self, email, token: str):
-        self.send_email(subject='Tu token de registro',
+        self.send_email(subject='Your registration token',
                         addressee=email,
-                        content_text=f'Token de verificación es:\n\n{token}\n\nVálido por 15 minutos.',
+                        content_text=f'Your verification token is:\n\n{token}\n\nValid for 15 minutes.',
                         sender=config('SENDER_MAIL'),
                         psw=config('PASSWORD'))
 
@@ -56,44 +56,43 @@ class Service:
         try:
             payload = jwt.decode(token, config('SECRET_KEY'), config('ALGORITHM'))
             if payload.get('purpose') != 'register_company':
-                raise HTTPException(status_code=401, detail='Token no válido para registro')
+                raise HTTPException(status_code=401, detail='Token is not valid for registration.')
             return payload
         except jwt.ExpiredSignatureError:
-            raise HTTPException(status_code=401, detail='Token expired')
+            raise HTTPException(status_code=401, detail='Token has expired.')
         except jwt.InvalidTokenError:
-            raise HTTPException(status_code=401, detail='Invalid token')
+            raise HTTPException(status_code=401, detail='Invalid token.')
 
     def verify_logs_token(self, credentials=Depends(seguridad)):
         token = credentials.credentials
         try:
-            # Obtener el payload sin verificar la firma
             unverified_payload = jwt.decode(token, options={'verify_signature': False})
             iss = unverified_payload.get('iss')
 
             if not iss:
-                raise HTTPException(status_code=401, detail='Invalid token: campo "iss" ausente.' )
+                raise HTTPException(status_code=401, detail='Invalid token: missing "iss" field.' )
 
-            # Buscar clave pública de la empresa
             public_key = self.nosql.verify_company(iss)
 
         except Exception:
-            raise HTTPException(status_code=401, detail="El token incorrecto.")
+            raise HTTPException(status_code=401, detail='Invalid token.')
 
         try:
-            # Verifica firma con la clave pública
             pyload = jwt.decode(token, public_key, algorithms='RS256')
             return pyload
 
         except jwt.ExpiredSignatureError:
-            raise HTTPException(status_code=401, detail="Expired token")
+            raise HTTPException(status_code=401, detail='Token has expired.')
         except jwt.InvalidTokenError:
-            raise HTTPException(status_code=401, detail="Invalid token")
+            raise HTTPException(status_code=401, detail='Invalid token')
 
     @staticmethod
     def validate_public_key(pem_str: str):
-        """ Validar que la clave pública tenga formato PEM correcto y sea un RSA válido."""
-        if not pem_str.startswith('-----BEGIN CERTIFICATE-----') or not pem_str.endswith('-----END CERTIFICATE-----'):
-            raise HTTPException(status_code=400, detail="Formato PEM incorrecto.")
+        """ Validate that the public key is a proper RSA PEM format."""
+        pem_str = pem_str.strip()
+
+        if not pem_str.startswith('-----BEGIN PUBLIC KEY-----') or not pem_str.endswith('-----END PUBLIC KEY-----'):
+            raise HTTPException(status_code=400, detail='Invalid PEM format.')
 
         try:
             public_key = serialization.load_pem_public_key(
@@ -102,9 +101,9 @@ class Service:
             )
             return public_key
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Clave pública inválida: {str(e)}")
+            raise HTTPException(status_code=400, detail=f'Invalid public key: {str(e)}')
 
-    def registered_company(self, data):
+    def register_company(self, data):
         # Validar formato y contenido de la clave
         self.validate_public_key(data['company_public_key'])
         company_id = str(uuid.uuid4())
@@ -120,7 +119,7 @@ class Service:
         obj = self.nosql.get_company(company_name)
         for email in obj['alert_emails']:
             self.send_email(
-                subject='Alerta Crítica - Error Grave Detectado.',
+                subject='Critical Alert - Severe Error Detected.',
                 addressee=email,
                 content_text=log_data,
                 sender=config('SENDER_MAIL'),
@@ -131,24 +130,24 @@ class Service:
         self.nosql.store_log_in_db(log_data, company_name)
         if log_data['level'] == 'ERROR':
             self.send_critical_alert(log_data, company_name)
-            return {'message': 'Log guardado y mensaje enviado para soporte'}
-        return {'message': 'Log guardado'}
+            return {'message': 'Log stored and support alert sent.'}
+        return {'message': 'Log stored successfully.'}
 
     def consult_filtered_logs(self, data: dict):
         query = {}
 
-        if 'empresa_id' in data:
-            query['empresa_id'] = data['empresa_id']
-        if 'nivel' in data:
-            query['level'] = data['nivel']
-        if 'usuario' in data:
-            query['user.name'] = data['usuario']
+        if 'company_id' in data:
+            query['company_id'] = data['company_id']
+        if 'level' in data:
+            query['level'] = data['level']
+        if 'user' in data:
+            query['user.name'] = data['user']
         if 'tags' in data:
             query['tags'] = {'$in': data['tags']}
-        if 'fecha_inicio' in data and 'fecha_fin' in data:
+        if 'start_date' in data and 'end_date' in data:
             query['timestamp'] = {
-                '$gte': data['fecha_inicio'],
-                '$lte': data['fecha_fin']
+                '$gte': data['start_date'],
+                '$lte': data['end_date']
             }
 
         result = self.nosql.search_log_in_db(query)
