@@ -1,6 +1,6 @@
 import unittest
 import jwt
-import datetime
+from datetime import datetime, timezone, timedelta
 from services import Service
 from fastapi import HTTPException
 from unittest.mock import MagicMock, patch
@@ -11,6 +11,7 @@ class TestServices(unittest.TestCase):
     @classmethod
     def setUp(cls):
         cls.service = Service()
+
         cls.secret_key = 'tu-clave-secreta-compartida'
         cls.algorithm = 'HS256'
 
@@ -18,7 +19,7 @@ class TestServices(unittest.TestCase):
             {
                 'email': 'email@email.com',
                 'purpose': 'register_company',
-                'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+                'exp': datetime.now(timezone.utc) + timedelta(hours=1)
             },
             cls.secret_key,
             cls.algorithm
@@ -27,7 +28,7 @@ class TestServices(unittest.TestCase):
         cls.token_expirado = jwt.encode({
             'email': 'email@email.com',
             'purpose': 'register_company',
-            'exp': datetime.datetime.utcnow() - datetime.timedelta(hours=1)
+            'exp': datetime.now(timezone.utc) - timedelta(hours=1)
         },
             cls.secret_key,
             cls.algorithm
@@ -37,7 +38,7 @@ class TestServices(unittest.TestCase):
             {
                 'email': 'email@email.com',
                 'purpose': 'register',
-                'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+                'exp': datetime.now(timezone.utc) + timedelta(hours=1)
             },
             cls.secret_key,
             cls.algorithm
@@ -67,6 +68,28 @@ class TestServices(unittest.TestCase):
         XUaUya9ssXiqipnmzIeQn0c264EPXXjLVxKuNOsp8tWRkvDBAC5U+rUnr+Xr1XbsPbnqMm5xPDE3lQm9Evzh9HxZb3A9IFp30IJYTXfEt4tY9+2
         NLojmV6inxpaEE6utiuGQvwXHOUV9EnO4WiQQ1igFfvwsiJGwphxMUnQo8SDGFqZJWY0tGjflKpXlQcC5h2t9D/nEN6uWKg5jAAbitAahT8zaIu
         nNwIDAQAB-----END PUBLIC KEY-----\n"""
+
+    @patch('smtplib.SMTP')
+    def test_send_email(self, mock_smtp):
+        subject = 'Teste Subject'
+        addressee = 'receiver@example.com'
+        content_text = 'Hello, this is a test.'
+        sender = 'sender@example.com'
+        psw = 'dummy_password'
+
+        mock_smtp_instance = MagicMock()
+        mock_smtp.return_value.__enter__.return_value = mock_smtp_instance
+
+        self.service.send_email(subject, addressee, content_text, sender, psw)
+
+        mock_smtp.assert_called_with('smtp.gmail.com', 465)
+        mock_smtp_instance.login.assert_called_once_with(sender, psw)
+        mock_smtp_instance.send_message.assert_called_once()
+
+        msg = mock_smtp_instance.send_message.call_args[0][0]
+        self.assertEqual(msg['Subject'], subject)
+        self.assertEqual(msg['To'], addressee)
+        self.assertEqual(msg['From'], sender)
 
     def test_token_valido(self):
         result = self.service.verify_registration_token(self.token_valido)
