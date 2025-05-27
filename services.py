@@ -104,7 +104,6 @@ class Service:
             raise HTTPException(status_code=400, detail=f'Invalid public key: {str(e)}')
 
     def register_company(self, data):
-        # Validar formato y contenido de la clave
         self.validate_public_key(data['company_public_key'])
         company_id = str(uuid.uuid4())
         self.nosql.store_company_in_db(

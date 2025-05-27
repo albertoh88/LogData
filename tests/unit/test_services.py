@@ -1,5 +1,6 @@
 import unittest
 import jwt
+import uuid
 from datetime import datetime, timezone, timedelta
 from services import Service
 from fastapi import HTTPException
@@ -69,7 +70,35 @@ class TestServices(unittest.TestCase):
         NLojmV6inxpaEE6utiuGQvwXHOUV9EnO4WiQQ1igFfvwsiJGwphxMUnQo8SDGFqZJWY0tGjflKpXlQcC5h2t9D/nEN6uWKg5jAAbitAahT8zaIu
         nNwIDAQAB-----END PUBLIC KEY-----\n"""
 
-    @patch('smtplib.SMTP')
+    @patch('services.jwt.encode')
+    @patch('services.datetime')
+    def test_generate_registration_token(self, mock_datetime, mock_jwt_encode):
+        fixed_now = datetime(2025, 5, 27, 12, 0, 0, tzinfo=timezone.utc)
+        mock_datetime.now.return_value = fixed_now
+        mock_datetime.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
+
+        mock_jwt_encode.return_value = 'token_mocker'
+
+        token = self.service.generate_registration_token('test@example.com')
+
+        expected_exp = fixed_now + timedelta(minutes=15)
+        expected_payload = {
+            'email': 'test@example.com',
+            'purpose': 'register_company',
+            'exp': expected_exp,
+        }
+
+        mock_jwt_encode.assert_called_once()
+        called_args, called_kwargs = mock_jwt_encode.call_args
+        payload_passed = called_args[0]
+
+        assert payload_passed['email'] == expected_payload['email']
+        assert payload_passed['purpose'] == expected_payload['purpose']
+        assert payload_passed['exp'] == expected_payload['exp']
+
+        self.assertEqual(token, 'token_mocker')
+
+    @patch('services.smtplib.SMTP')
     def test_send_email(self, mock_smtp):
         subject = 'Teste Subject'
         addressee = 'receiver@example.com'
@@ -91,32 +120,81 @@ class TestServices(unittest.TestCase):
         self.assertEqual(msg['To'], addressee)
         self.assertEqual(msg['From'], sender)
 
-    def test_token_valido(self):
+    @patch('services.config')
+    @patch('services.Service.send_email')
+    def test_send_registration_email_calls_send_email_correctly(self, mock_send_email, mock_config):
+        mock_config.side_effect = lambda key: {
+            'SENDER_MAIL': 'test@example.com',
+            'PASSWORD': '1234'
+        }[key]
+
+        cls = self.__class__
+        cls.service.send_registration_email('user@example.com', 'token123')
+
+        mock_send_email.assert_called_once()
+        args, kwargs = mock_send_email.call_args
+
+        self.assertEqual(kwargs['subject'], 'Your registration token')
+        self.assertEqual(kwargs['addressee'], 'user@example.com')
+        self.assertIn('token123', kwargs['content_text'])
+        self.assertIn('Valid for 15 minutes', kwargs['content_text'])
+        self.assertEqual(kwargs['sender'], 'test@example.com')
+        self.assertEqual(kwargs['psw'], '1234')
+
+    def test_verify_registration_token_valido(self):
         result = self.service.verify_registration_token(self.token_valido)
         self.assertIsInstance(result, dict)
         self.assertIn('email', result)
         self.assertEqual('register_company', result['purpose'])
 
-    def test_token_expirado(self):
+    def test_verify_registration_token_expirado(self):
         with self.assertRaises(HTTPException) as cm:
             self.service.verify_registration_token(self.token_expirado)
 
         self.assertEqual(cm.exception.status_code, 401)
         self.assertEqual(cm.exception.detail, 'Token has expired.')
 
-    def test_token_invalid(self):
+    def test_verify_registration_token_invalid(self):
         with self.assertRaises(HTTPException) as cm:
             self.service.verify_registration_token(self.token_invalido)
 
         self.assertEqual(cm.exception.status_code, 401)
         self.assertEqual(cm.exception.detail, 'Token is not valid for registration.')
 
-    def test_token_mal_formado(self):
+    def test_verify_registration_token_mal_formado(self):
         with self.assertRaises(HTTPException) as cm:
             self.service.verify_registration_token(self.token_mal_formado)
 
         self.assertEqual(cm.exception.status_code, 401)
         self.assertEqual(cm.exception.detail, 'Invalid token.')
+
+    @patch('services.jwt.decode')
+    @patch('services.Nosql.verify_company')
+    def test_verify_logs_token(self, mock_verify_company, mock_jwt_decode):
+        mock_credentials = MagicMock()
+        mock_credentials.credentials = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJlbXByZXNhX2FsYmVydG8iLCJzdWIiOiJhbGJlcnRvIiwiaWF0IjoxNzQ4MzQ4NjIyLCJleHAiOjE3NDg0MzUwMjJ9.TgdJXV1WVX8LF9a2X94NV65XpxPpX41WJo5-qfEYdDEZmLM_weadfzlgdUVvt2jlAl0durogU2sk3RYN7H3IXb7pPebKriqtJDKqNLK5OfqN-Ivv41JU1oFcpCL4TqmPKirzF2ZGDmeqp2UcOTnPqr3A8ygY_g53MhOUYJ-RrU9o0DDFO6WEEIFl3gBFtdn9l-FRS3128TI7tcNU9CYBM91HWjT1b5YX-Us35D_PeaWBCwYrvF-J-7ffKES8c5DFWzRe-dYnISyfGNSBIM_z5_3AwcuTZCoqwIn7wCjLdJW3kd4RMsh2dSa1FHG34rXMiwxhPr_tRt_-7VXLllceWA'
+        mock_jwt_decode.side_effect = [{'iss': 'empresa_alberto'}, {'sub': 'alberto'}]
+
+        mock_verify_company.return_value = 'mi_clave_publica'
+
+        result = self.service.verify_logs_token(mock_credentials)
+
+        assert mock_jwt_decode.call_count == 2
+
+        mock_jwt_decode.assert_any_call(
+            mock_credentials.credentials,
+            options={'verify_signature': False},
+        )
+
+        mock_verify_company.assert_called_once_with('empresa_alberto')
+
+        mock_jwt_decode.assert_any_call(
+            mock_credentials.credentials,
+            'mi_clave_publica',
+            algorithms='RS256',
+        )
+
+        self.assertEqual(result, {'sub': 'alberto'})
 
     def test_validate_public_key(self):
         result = self.service.validate_public_key(self.public_pem)
@@ -141,3 +219,29 @@ class TestServices(unittest.TestCase):
 
         self.assertEqual(cm.exception.status_code, 400)
         self.assertTrue(cm.exception.detail.startswith('Invalid public key'))
+
+    @patch('services.Service.validate_public_key')
+    @patch('services.uuid.uuid4')
+    def test_register_company(self, mock_uuid, mock_validate):
+        mock_uuid.return_value = uuid.UUID('12345678-1234-5678-1234-567812345678')
+        mock_validate.return_value = None
+
+        self.service.nosql = MagicMock()
+
+        data = {
+            'company_public_key': 'public_key_example',
+            'company_name': 'MyCompany',
+            'alert_emails': ['alert1@example.com', 'alert2@example.com']
+        }
+        result = self.service.register_company(data)
+
+        mock_uuid.assert_called_once()
+
+        self.service.nosql.store_company_in_db.assert_called_once_with(
+            company_id='12345678-1234-5678-1234-567812345678',
+            public_key='public_key_example',
+            company_name='MyCompany',
+            alert_emails=['alert1@example.com', 'alert2@example.com']
+        )
+
+        self.assertEqual(result, '12345678-1234-5678-1234-567812345678')
