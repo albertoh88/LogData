@@ -172,7 +172,7 @@ class TestServices(unittest.TestCase):
     @patch('services.Nosql.verify_company')
     def test_verify_logs_token(self, mock_verify_company, mock_jwt_decode):
         mock_credentials = MagicMock()
-        mock_credentials.credentials = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJlbXByZXNhX2FsYmVydG8iLCJzdWIiOiJhbGJlcnRvIiwiaWF0IjoxNzQ4MzQ4NjIyLCJleHAiOjE3NDg0MzUwMjJ9.TgdJXV1WVX8LF9a2X94NV65XpxPpX41WJo5-qfEYdDEZmLM_weadfzlgdUVvt2jlAl0durogU2sk3RYN7H3IXb7pPebKriqtJDKqNLK5OfqN-Ivv41JU1oFcpCL4TqmPKirzF2ZGDmeqp2UcOTnPqr3A8ygY_g53MhOUYJ-RrU9o0DDFO6WEEIFl3gBFtdn9l-FRS3128TI7tcNU9CYBM91HWjT1b5YX-Us35D_PeaWBCwYrvF-J-7ffKES8c5DFWzRe-dYnISyfGNSBIM_z5_3AwcuTZCoqwIn7wCjLdJW3kd4RMsh2dSa1FHG34rXMiwxhPr_tRt_-7VXLllceWA'
+        mock_credentials.credentials = 'fake.jwt.token'
         mock_jwt_decode.side_effect = [{'iss': 'empresa_alberto'}, {'sub': 'alberto'}]
 
         mock_verify_company.return_value = 'mi_clave_publica'
@@ -195,6 +195,21 @@ class TestServices(unittest.TestCase):
         )
 
         self.assertEqual(result, {'sub': 'alberto'})
+
+    @patch('services.jwt.decode')
+    @patch('services.Nosql.verify_company')
+    def test_verify_logs_token_raise_when_missing_iss_field(self, mock_verify_company, mock_jwt_decode):
+        mock_credentials = MagicMock()
+        mock_credentials.credentials = 'fake.jwt.token'
+        mock_jwt_decode.side_effect = [{'sub': 'alberto'}, Exception('No se debería llamar')]
+
+        with self.assertRaises(HTTPException) as cm:
+            self.service.verify_logs_token(mock_credentials)
+
+        self.assertEqual(cm.exception.status_code, 401)
+        self.assertEqual(cm.exception.detail, 'Invalid token: missing "iss" field.')
+
+        mock_verify_company.assert_not_called()
 
     def test_validate_public_key(self):
         result = self.service.validate_public_key(self.public_pem)
@@ -245,3 +260,33 @@ class TestServices(unittest.TestCase):
         )
 
         self.assertEqual(result, '12345678-1234-5678-1234-567812345678')
+
+    @patch('services.Service.send_email')
+    @patch('services.Nosql.get_company')
+    def test_send_critical_alert_sends_emails_to_all_alert_recipients(self, mock_send_email, mock_get_company):
+        mock_get_company.return_value = {'alert_emails': ['a@example.com', 'b@example.com']}
+
+        log_data = 'ERROR: Something critical happened!'
+        company_name = 'MyCompany'
+
+        cls = self.__class__
+        cls.service.send_critical_alert(log_data, company_name)
+
+        mock_get_company.assert_called_once_with(company_name)
+        calls = [
+            unittest.mock.call(
+                subject='Critical Alert - Severe Error Detected',
+                addressee='alert1@example.com',
+                content_text=log_data,
+                sender=unittest.mock.ANY,
+                psw=unittest.mock.ANY,
+            ),
+            unittest.mock.call(
+                subject='Critical Alert - Severe Error Detected',
+                addressee='alert2@example.com',
+                content_text=log_data,
+                sender=unittest.mock.ANY,
+                psw=unittest.mock.ANY,
+            ),
+        ]
+        mock_send_email.assert_has_calls(calls, any_order=True)

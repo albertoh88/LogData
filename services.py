@@ -67,13 +67,16 @@ class Service:
         token = credentials.credentials
         try:
             unverified_payload = jwt.decode(token, options={'verify_signature': False})
-            iss = unverified_payload.get('iss')
 
-            if not iss:
+            if 'iss' not in unverified_payload:
                 raise HTTPException(status_code=401, detail='Invalid token: missing "iss" field.' )
+
+            iss = unverified_payload.get('iss')
 
             public_key = self.nosql.verify_company(iss)
 
+        except HTTPException:
+            raise
         except Exception:
             raise HTTPException(status_code=401, detail='Invalid token.')
 
