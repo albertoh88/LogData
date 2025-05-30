@@ -331,3 +331,31 @@ class TestServices(unittest.TestCase):
         mock_store_log_in_db.assert_called_once_with(log_data, company_name)
         mock_send_critical_alert.assert_not_called()
         self.assertEqual(result, {'message': 'Log stored successfully.'})
+
+    @patch('services.Nosql.search_log_in_db')
+    def test_consult_filtered_logs_builds_query_correctly(self, mock_search_log_in_db):
+        data = {
+            'company_id': '12345',
+            'level': 'ERROR',
+            'user': 'Alberto',
+            'tags': ['critical', 'urgent'],
+            'start_date': '2024-05-01T00:00:00Z',
+            'end_date': '2024-05-30T23:59:59Z',
+        }
+        expected_query = {
+            'company_id': '12345',
+            'level': 'ERROR',
+            'user.name': 'Alberto',
+            'tags': {'$in': ['critical', 'urgent']},
+            'timestamp': {
+                '$gte': '2024-05-01T00:00:00Z',
+                '$lte': '2024-05-30T23:59:59Z'
+            }
+        }
+
+        mock_search_log_in_db.return_value = [{'log_id': 1}, {'log_id': 2}]
+
+        result = self.service.consult_filtered_logs(data)
+
+        mock_search_log_in_db.assert_called_once_with(expected_query)
+        self.assertEqual(result, [{'log_id': 1}, {'log_id': 2}])
