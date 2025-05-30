@@ -261,32 +261,73 @@ class TestServices(unittest.TestCase):
 
         self.assertEqual(result, '12345678-1234-5678-1234-567812345678')
 
+    @patch('services.Nosql')
     @patch('services.Service.send_email')
-    @patch('services.Nosql.get_company')
-    def test_send_critical_alert_sends_emails_to_all_alert_recipients(self, mock_send_email, mock_get_company):
-        mock_get_company.return_value = {'alert_emails': ['a@example.com', 'b@example.com']}
+    def test_send_critical_alert_sends_emails_to_all_alert_recipients(self, mock_send_email, mock_nosql):
+        mock_nosql_instance = mock_nosql.return_value
+        mock_nosql_instance.get_company.return_value = {'alert_emails': ['a@example.com', 'b@example.com']}
 
         log_data = 'ERROR: Something critical happened!'
         company_name = 'MyCompany'
 
-        cls = self.__class__
-        cls.service.send_critical_alert(log_data, company_name)
+        service = Service()
+        service.send_critical_alert(log_data, company_name)
 
-        mock_get_company.assert_called_once_with(company_name)
+        mock_nosql_instance.get_company.assert_called_once_with(company_name)
         calls = [
             unittest.mock.call(
-                subject='Critical Alert - Severe Error Detected',
-                addressee='alert1@example.com',
+                subject='Critical Alert - Severe Error Detected.',
+                addressee='a@example.com',
                 content_text=log_data,
                 sender=unittest.mock.ANY,
                 psw=unittest.mock.ANY,
             ),
             unittest.mock.call(
-                subject='Critical Alert - Severe Error Detected',
-                addressee='alert2@example.com',
+                subject='Critical Alert - Severe Error Detected.',
+                addressee='b@example.com',
                 content_text=log_data,
                 sender=unittest.mock.ANY,
                 psw=unittest.mock.ANY,
             ),
         ]
         mock_send_email.assert_has_calls(calls, any_order=True)
+
+    @patch('services.Service.send_critical_alert')
+    @patch('services.Nosql.store_log_in_db')
+    def test_process_logs_error_level(self, mock_send_critical_alert, mock_store_log_in_db):
+        log_data = {'timestamp': '2024-05-30T12:34:56Z',
+                    'host': 'server-01',
+                    'service': 'backend',
+                    'level': 'ERROR',
+                    'event': {'id': 1, 'description': 'Some event'},
+                    'user': {'id': 1, 'name': 'Alberto'},
+                    'message': 'Something critical happened!',
+                    'tags': ['critical', 'urgent']}
+
+        company_name = 'MyCompany'
+
+        result = self.service.process_log(log_data, company_name)
+
+        mock_store_log_in_db.assert_called_once_with(log_data, company_name)
+        mock_send_critical_alert.assert_called_once_with(log_data, company_name)
+        self.assertEqual(result, {'message': 'Log stored and support alert sent.'})
+
+    @patch('services.Nosql.store_log_in_db')
+    @patch('services.Service.send_critical_alert')
+    def test_process_logs_non_error_level(self, mock_send_critical_alert, mock_store_log_in_db):
+        log_data = {'timestamp': '2024-05-30T12:34:56Z',
+                    'host': 'server-01',
+                    'service': 'backend',
+                    'level': 'INFO',
+                    'event': {'id': 2, 'description': 'Some event'},
+                    'user': {'id': 2, 'name': 'Alberto'},
+                    'message': 'Something critical happened!',
+                    'tags': ['critical', 'urgent']}
+
+        company_name = 'MyCompany'
+
+        result = self.service.process_log(log_data, company_name)
+
+        mock_store_log_in_db.assert_called_once_with(log_data, company_name)
+        mock_send_critical_alert.assert_not_called()
+        self.assertEqual(result, {'message': 'Log stored successfully.'})
