@@ -385,4 +385,4 @@ class TestServices(unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             self.service.consult_filtered_logs({})
 
-        self.assertIn('', str(context.exception))
+        self.assertIn('No filters provided for log search', str(context.exception))

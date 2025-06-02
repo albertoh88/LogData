@@ -153,7 +153,7 @@ class Service:
             }
 
         if not query:
-            raise ValueError('')
+            raise ValueError('No filters provided for log search')
 
         result = self.nosql.search_log_in_db(query)
 
