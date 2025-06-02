@@ -359,3 +359,30 @@ class TestServices(unittest.TestCase):
 
         mock_search_log_in_db.assert_called_once_with(expected_query)
         self.assertEqual(result, [{'log_id': 1}, {'log_id': 2}])
+
+    @patch('services.Nosql.search_log_in_db')
+    def test_consult_filtered_logs_builds_partial_query(self, mock_search_log_in_db):
+        data = {
+            'company_id': '12345',
+            'level': 'ERROR',
+            'user': 'Alberto'
+        }
+        expected_query = {
+            'company_id': '12345',
+            'level': 'ERROR',
+            'user.name': 'Alberto'
+        }
+
+        mock_search_log_in_db.return_value = [{'log_id': 1}, {'log_id': 2}]
+
+        result = self.service.consult_filtered_logs(data)
+
+        mock_search_log_in_db.assert_called_once_with(expected_query)
+        self.assertEqual(result, [{'log_id': 1}, {'log_id': 2}])
+
+    @patch('services.Nosql.search_log_in_db')
+    def test_consult_filtered_logs_with_no_filters_returns_all(self, _):
+        with self.assertRaises(ValueError) as context:
+            self.service.consult_filtered_logs({})
+
+        self.assertIn('', str(context.exception))

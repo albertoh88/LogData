@@ -152,6 +152,9 @@ class Service:
                 '$lte': data['end_date']
             }
 
+        if not query:
+            raise ValueError('')
+
         result = self.nosql.search_log_in_db(query)
 
         return result
