@@ -8,15 +8,12 @@ class TestNosql(unittest.TestCase):
     def setUp(self):
         patcher_config = patch('services.config')
         patcher_conn = patch('conection.Connection.connection_nosql')
-        patcher_get_company = patch.object(Nosql, 'get_company')
 
         self.addCleanup(patcher_config.stop)
         self.addCleanup(patcher_conn.stop)
-        self.addCleanup(patcher_get_company.stop)
 
         self.mock_config = patcher_config.start()
         self.mock_connection_nosql = patcher_conn.start()
-        self.mock_get_company = patcher_get_company.start()
 
         self.mock_config.side_effect = lambda key: {'BD': 'test_db', 'COLLECTION_COMPANIES': 'companies'}[key]
 
@@ -94,6 +91,7 @@ class TestNosql(unittest.TestCase):
 
         result = self.nosql.get_company('MyCompany')
 
+        self.mock_collection.find_one.assert_called_once_with({'company_name': 'MyCompany'})
         self.assertEqual(result, {'company_name': 'MyCompany'})
 
     def test_get_company_not_found_raises_exception(self):
@@ -106,16 +104,17 @@ class TestNosql(unittest.TestCase):
         self.assertEqual(cm.exception.status_code, 404)
         self.assertIn('Company not found.', str(cm.exception.detail))
 
-    def test_store_log_in_db(self):
+    @patch('db_nosql.Nosql.get_company')
+    def test_store_log_in_db(self, mock_get_company):
         log_data = {'level': 'ERROR', 'message': 'Something happened.'}
         company_name = 'MyCompany'
         company_info = {'company_id': '12345'}
 
-        self.mock_get_company.return_value = company_info
+        mock_get_company.return_value = company_info
 
         self.nosql.store_log_in_db(log_data.copy(), company_name)
 
-        self.mock_get_company.assert_called_once_with(company_name)
+        mock_get_company.assert_called_once_with(company_name)
 
         args, kwargs = self.mock_collection.insert_one.call_args
         inserted_doc = args[0]
