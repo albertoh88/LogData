@@ -74,7 +74,7 @@ def register_company(data: CompanyRegisterSchema):
     try:
         service.verify_registration_token(data.token)
         company_id = service.register_company(data)
-        return {'message': 'Company successfully registered', 'company_id': company_id}
+        return {'message': 'Company successfully registered.', 'company_id': company_id}
     except HTTPException:
         raise
     except Exception as e:
