@@ -1,8 +1,10 @@
+import services
 from services import Service
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 
 
 router = APIRouter()
@@ -70,13 +72,13 @@ def request_registration(data: RegisterRequestSchema):
     return {'message': 'A temporary registration email has been sent to your email.'}
 
 @router.post("/register_company")
-def register_company(data: CompanyRegisterSchema):
+def register_company(data: CompanyRegisterSchema): 
     try:
         service.verify_registration_token(data.token)
         company_id = service.register_company(data)
         return {'message': 'Company successfully registered.', 'company_id': company_id}
-    except HTTPException:
-        raise
+    except HTTPException as http_exc:
+        raise http_exc
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
