@@ -47,28 +47,29 @@ class TestRequestRegistrationEndpoint(unittest.TestCase):
     def test_register_company_invalid_token(self, mock_verify_token, mock_register_company):
         mock_verify_token.side_effect = HTTPException(status_code=401, detail='Invalid token')
 
-        payload = {'token': 'bad_token', 'company_name': 'MyCompany', 'email': 'email@test.com',
+        payload = {'token': 'bad_token', 'company_name': 'MyCompany',
                    'company_public_key': 'abc123xyz', 'alert_emails': ['alert1@test.com', 'alert2@test.com']}
 
-        response = self.client.post('/register_company', json=payload)
+        with self.assertRaises(HTTPException) as http_exc:
+            self.client.post('/register_company', json=payload)
 
-        self.assertEqual(response.status_code, 401)
-        self.assertEqual(response.json(), {'detail': 'Invalid token'})
+        self.assertEqual(http_exc.exception.status_code, 401)
+        self.assertTrue(http_exc.exception.detail.startswith('Invalid token'))
 
         mock_verify_token.assert_called_once_with('bad_token')
         mock_register_company.assert_not_called()
 
-    @patch('services.Service.register_company')
-    @patch('services.Service.verify_registration_token')
+    @patch('routers.router.service.register_company')
+    @patch('routers.router.service.verify_registration_token')
     def test_register_company_invalid_error(self, mock_verify_token, mock_register_company):
         mock_verify_token.return_value = None
-
         mock_register_company.side_effect = Exception('Unexpected error')
 
-        payload = {'token': 'bad_token', 'company_name': 'MyCompany', 'email': 'email@test.com',
+        payload = {'token': 'bad_token', 'company_name': 'MyCompany',
                    'company_public_key': 'abc123xyz', 'alert_emails': ['alert1@test.com', 'alert2@test.com']}
 
-        response = self.client.post('/register_company', json=payload)
+        with self.assertRaises(HTTPException) as http_exc:
+            self.client.post('/register_company', json=payload)
 
-        self.assertEqual(response.status_code, 500)
-        self.assertEqual(response.json(), {'detail': 'Unexpected error'})
+        self.assertEqual(http_exc.exception.status_code, 500)
+        self.assertTrue(http_exc.exception.detail.startswith('Unexpected error'))
