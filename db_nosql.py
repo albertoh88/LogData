@@ -7,13 +7,11 @@ from conection import Connection
 class Nosql:
     def __init__(self):
         self.conn = Connection()
+        self.db = self.conn.get_database()
 
     def verify_company(self, company_name):
         try:
-            cliente = self.conn.connection_nosql()
-            db = cliente[config('BD')]
-            collection = db[config('COLLECTION_COMPANIES')]
-
+            collection = self.db[config('COLLECTION_COMPANIES')]
             company = collection.find_one({'company_name': company_name})
 
             if not company:
@@ -24,14 +22,14 @@ class Nosql:
                 raise HTTPException(status_code=404, detail='Public key not found for the company.')
 
             return public_key
-        except Exception:
+        except HTTPException:
             raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error accessing database{str(e)}")
 
     def store_company_in_db(self, company_id, public_key, company_name, alert_emails):
         try:
-            cliente = self.conn.connection_nosql()
-            db = cliente[config('BD')]
-            collection = db[config('COLLECTION_COMPANIES')]
+            collection = self.db[config('COLLECTION_COMPANIES')]
 
             existing = collection.find_one({'company_name': company_name})
             if existing:
@@ -48,9 +46,7 @@ class Nosql:
 
     def get_company(self, company_name):
         try:
-            cliente = self.conn.connection_nosql()
-            db = cliente[config('BD')]
-            collection = db[config('COLLECTION_COMPANIES')]
+            collection = self.db[config('COLLECTION_COMPANIES')]
 
             company = collection.find_one({'company_name': company_name})
             if not company:
@@ -62,9 +58,7 @@ class Nosql:
 
     def store_log_in_db(self, log_data, company_name):
         try:
-            client = self.conn.connection_nosql()
-            db = client[config('BD')]
-            collection = db[config('COLLECTION_LOGS')]
+            collection = self.db[config('COLLECTION_LOGS')]
 
             company = self.get_company(company_name)
 
@@ -81,9 +75,7 @@ class Nosql:
 
     def search_log_in_db(self, filters):
         try:
-            client = self.conn.connection_nosql()
-            db = client[config('BD')]
-            collection = db[config('COLLECTION_LOGS')]
+            collection = self.db[config('COLLECTION_LOGS')]
             result = list(collection.find(filters))
             return result
         except Exception:
