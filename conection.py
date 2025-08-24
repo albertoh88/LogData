@@ -6,7 +6,7 @@ class Connection:
     def __init__(self):
         self.mongo_uri = (f"mongodb+srv://{config('NOSQL_USER')}:{config('NOSQL_PASSWORD')}"
                      f"@{config('NOSQL_HOST')}/{config('BD')}"
-                     f"?retryWrites=true&w=majority&tls=false&tlsAllowInvalidCertificates=false")
+                     f"?retryWrites=true&w=majority&tls=true&tlsAllowInvalidCertificates=false")
 
         self.client = None
 
