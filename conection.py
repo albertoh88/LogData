@@ -1,6 +1,7 @@
 from decouple import config
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError, ConnectionFailure, ServerSelectionTimeoutError
+import certifi
 
 class Connection:
     def __init__(self):
@@ -20,6 +21,7 @@ class Connection:
 
         try:
             self.client = MongoClient(self.mongo_uri, tls=True, tlsAllowInvalidCertificates=False,
+                                      tlsCAFile=certifi.where(),
                                       serverSelectionTimeoutMS=20000)
             # Tentar uma operação rápida para validar a conexão
             self.client.admin.command('ping')
