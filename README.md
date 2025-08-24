@@ -133,6 +133,32 @@ curl -X POST http://localhost:8000/logs \
     "tags": ["security", "login", "alerta"]
   }'
 ```
+## 🐳 Usando Docker
+
+Se você quiser rodar a API diretamente usando a imagem do Docker Hub, siga estes passos:
+
+Rodar a API com a imagem pronta
+```bash
+docker run -p 8000:8000 elflacorex/logdata:latest
+```
+A API estará acessível em: http://localhost:8000
+
+Para quem quiser construir a imagem localmente
+```bash
+docker build -t logdata .
+docker run -p 8000:8000 logdata
+```
+Subir a imagem para o Docker Hub (opcional)
+```bash
+docker login
+docker tag logdata elflacorex/logdata:latest
+docker push elflacorex/logdata:latest
+```
+
+Depois, qualquer usuário pode rodar:
+```bash
+docker run -p 8000:8000 elflacorex/logdata:latest
+```
 **Documentação automática**
 
 O FastAPI gera automaticamente a documentação interativa da API.
