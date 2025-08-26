@@ -13,17 +13,18 @@ class Connection:
 
     def connection_nosql(self):
         """
-                Conecta-se ao MongoDB Atlas usando a URI construída.
-                Retorna um objeto MongoClient pronto para uso.
+                Connects to MongoDB Atlas using the constructed URI.
+                Returns a ready-to-use MongoClient object.
         """
         if self.client:
             return self.client
 
         try:
-            self.client = MongoClient(self.mongo_uri, tls=True, tlsAllowInvalidCertificates=False,
+            self.client = MongoClient(self.mongo_uri,
+                                      tls=True,
+                                      tlsAllowInvalidCertificates=False,
                                       tlsCAFile=certifi.where(),
                                       serverSelectionTimeoutMS=20000)
-            # Tentar uma operação rápida para validar a conexão
             self.client.admin.command('ping')
             return self.client
         except (ConnectionFailure, ServerSelectionTimeoutError) as cf:
@@ -35,7 +36,7 @@ class Connection:
 
     def get_database(self):
         """
-               Retorna o objeto do banco de dados configurado no .env
+               Returns the database object configured in the .env.
         """
 
         if not self.client:
