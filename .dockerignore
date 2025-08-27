@@ -1,0 +1,10 @@
+__pycahe__
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv
+.vscode
+.git
+.gitignore
+tests
