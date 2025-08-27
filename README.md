@@ -17,27 +17,45 @@
 ## ⚙️ Como instalar
 Use o gerenciador de dependências pip para instalar os pacotes necessários.
 **Clone o repositório**
-```
+```bash
 git clone https://github.com/albertoh88/LogData.git
 ```
 **Crie e ative um ambiente virtual**
 **Windows**
-```
+```bash
 python -m venv venv
 venv\Scripts\activate
 ```
 **Linux / MacOS**
-```
+```bash
 python3 -m venv venv
 source venv/bin/activate
 ```
 **Instale as dependências**
-```
+```bash
 pip install -r requirements.txt
 ```
+## ⚙️ Configuração do arquivo .env
 
-Abra o arquivo **.env** e certifique-se de inserir seus dados de conexão com o banco de dados. Substitua host, porta, nome do banco, usuário e senha pelas suas credenciais do MongoDB. O código para criar o banco de dados MongoDB está no diretório principal.
+Antes de rodar a API, crie seu próprio arquivo `.env` baseado no exemplo fornecido:
 
+**Copiar exemplo para criar seu próprio .env**
+```bash
+cp .env.example .env
+```
+
+**Editar .env com credenciais válidas do MongoDB Atlas e dados de e-mail**
+```bash
+nano .env  # ou use seu editor preferido
+```
+**Certifique-se de preencher todas as variáveis corretamente, incluindo:**
+
+ - NOSQL_HOST, NOSQL_PORT, NOSQL_USER, NOSQL_PASSWORD
+ - BD, COLLECTION_LOGS, COLLECTION_COMPANIES
+ - SECRET_KEY, PUBLIC_KEY, ALGORITHM
+ - SENDER_MAIL, PASSWORD
+ - PORT, HOST
+ - 
 Para executar a aplicação, use o arquivo **app.py**. A API estará disponível em **http://127.0.0.1:8000**
 
 ## 🔐 Autenticação e Tokens
@@ -48,14 +66,22 @@ O token deve conter as seguintes informações:
 
 ```json
 {
-  "iss": "empresa_x",       // ✅ Obrigatório: identifica unicamente a empresa
-  "sub": "log-agent",       // 🔍 Opcional: sistema ou módulo que gera o token
-  "aud": "log-api",         // 🎯 Opcional: indica que o token é para sua API
-  "iat": 1715778000,        // 🕒 Emitido em (timestamp UNIX)
-  "exp": 1715781600,        // ⏳ Expira em (ex.: 1h depois)
-  "scope": "log:write"      // 🔐 Opcional: níveis de acesso
+  "iss": "empresa_x",
+  "sub": "log-agent",
+  "aud": "log-api",
+  "iat": 1715778000,
+  "exp": 1715781600,
+  "scope": "log:write"
 }
 ```
+## 📌 Descrição dos campos:
+
+iss: Obrigatório, identifica unicamente a empresa
+sub: Opcional, sistema ou módulo que gera o token
+aud: Opcional, indica que o token é para sua API
+iat: Emitido em (timestamp UNIX)
+exp: Expira em (ex.: 1h depois)
+scope: Opcional, níveis de acesso
 
 ## 📌 Como usar
 Para enviar logs à API, você precisa de um token JWT válido incluído no header Authorization.
@@ -146,7 +172,12 @@ A API estará acessível em: http://localhost:8000
 Para quem quiser construir a imagem localmente
 ```bash
 docker build -t logdata .
-docker run -p 8000:8000 logdata
+docker run -p 8000:8000 --env-file .env logdata:lastest
+```
+Testar a conexão de dentro do contêiner (opcional):
+```bash
+docker exec -it <container_id> bash
+python -m tests.integration.test_connection
 ```
 Subir a imagem para o Docker Hub (opcional)
 ```bash
@@ -173,7 +204,7 @@ Permite testar todos os endpoints diretamente do navegador, sem precisar do Post
 [![GitHub](https://img.shields.io/badge/GitHub-albertoh88-black?logo=github)](https://github.com/albertoh88)
 
 Notas adicionais Documentação OpenAPI: O FastAPI gera automaticamente uma interface interativa da API acessível em http://127.0.0.1:8000/docs. Não se esqueça se for usar o Uvicorn diretamente de rodar o servidor com :
-```
+```bash
 uvicorn app:app --reload
 ```
 
