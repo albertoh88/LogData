@@ -1,7 +1,10 @@
 from pymongo import MongoClient
-import os
-MONGO_URI = os.getenv("MONGO_URI")
-MONGO_DB = os.getenv("MONGO_DB")
+from decouple import config
+
+MONGO_URI = (f"mongodb+srv://{config('NOSQL_USER')}:{config('NOSQL_PASSWORD')}"
+             f"@{config('NOSQL_HOST')}/{config('BD')}"
+             f"?retryWrites=true&w=majority&tls=true&tlsAllowInvalidCertificates=false")
+MONGO_DB = config('BD')
 
 client = MongoClient(MONGO_URI)
 db = client[MONGO_DB]
