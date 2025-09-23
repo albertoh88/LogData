@@ -5,10 +5,12 @@ from typing import Optional, List
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPBearer
 
 
 router = APIRouter()
 service = Service()
+security = HTTPBearer()
 
 
 class RegisterRequestSchema(BaseModel):
@@ -72,7 +74,7 @@ def request_registration(data: RegisterRequestSchema):
     return {'message': 'A temporary registration email has been sent to your email.'}
 
 @router.post("/register_company")
-def register_company(data: CompanyRegisterSchema): 
+def register_company(data: CompanyRegisterSchema):
     try:
         service.verify_registration_token(data.token)
         company_id = service.register_company(data)
@@ -82,7 +84,7 @@ def register_company(data: CompanyRegisterSchema):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/logs")
+@router.post("/logs", dependencies=[Depends(security)])
 def receive_logs(log: LogSchema, payload=Depends(service.verify_logs_token)):
     try:
         company_name = payload['iss']
