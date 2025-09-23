@@ -148,9 +148,9 @@ class Service:
         if 'tags' in data:
             query['tags'] = {'$in': data['tags']}
         if 'start_date' in data and 'end_date' in data:
-            query['timestamp'] = {
-                '$gte': data['start_date'],
-                '$lte': data['end_date']
+            query['log.timestamp'] = {
+                '$gte': data['start_date'].isoformat() + "Z",
+                '$lte': data['end_date'].isoformat() + "Z"
             }
 
         if not query:
