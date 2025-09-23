@@ -3,14 +3,15 @@ import smtplib
 import uuid
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
-from email.message import EmailMessage
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from datetime import datetime, timedelta, timezone
 from db_nosql import Nosql
 from decouple import config
 from fastapi import HTTPException, Depends
 from fastapi.security import HTTPBearer
 
-seguridad = HTTPBearer()
+security = HTTPBearer()
 
 class Service:
     def __init__(self):
@@ -28,28 +29,30 @@ class Service:
         return token
 
     @staticmethod
-    def send_email(subject, addressee, content_text, sender, psw, **options):
-        msg = EmailMessage()
-        msg['Subject'] = subject
-        msg['From'] = sender
+    def send_email(subject, addressee, content_text, sender='from@example.com'):
+        sender_email = sender
+        sender_user = config('MAILTRAP_USER')
+        sender_password = config('MAILTRAP_PASSWORD')
+
+        msg = MIMEMultipart()
+        msg['From'] = sender_email
         msg['To'] = addressee
+        msg['Subject'] = subject
 
-        if 'content_html' in options:
-            msg.set_content(content_text)
-            msg.add_alternative(options['register'], subtype='html')
-        else:
-            msg.set_content(content_text)
+        msg.attach(MIMEText(content_text, 'plain'))
 
-        with smtplib.SMTP('smtp.gmail.com', 465) as smtp:
-            smtp.login(sender, psw)
-            smtp.send_message(msg)
+        with smtplib.SMTP('sandbox.smtp.mailtrap.io', 587) as server:
+            server.starttls()
+            server.login(sender_user, sender_password)
+
+            server.sendmail(sender_email, addressee, msg.as_string())
+
+        return {'success': True, 'message': f'O email foi enviado para {addressee}'}
 
     def send_registration_email(self, email, token: str):
         self.send_email(subject='Your registration token',
                         addressee=email,
-                        content_text=f'Your verification token is:\n\n{token}\n\nValid for 15 minutes.',
-                        sender=config('SENDER_MAIL'),
-                        psw=config('PASSWORD'))
+                        content_text=f'Your verification token is:\n\n{token}\n\nValid for 15 minutes.')
 
     @staticmethod
     def verify_registration_token(token):
@@ -63,7 +66,7 @@ class Service:
         except jwt.InvalidTokenError:
             raise HTTPException(status_code=401, detail='Invalid token.')
 
-    def verify_logs_token(self, credentials=Depends(seguridad)):
+    def verify_logs_token(self, credentials=Depends(security)):
         token = credentials.credentials
         try:
             unverified_payload = jwt.decode(token, options={'verify_signature': False})
@@ -123,9 +126,7 @@ class Service:
             self.send_email(
                 subject='Critical Alert - Severe Error Detected.',
                 addressee=email,
-                content_text=log_data,
-                sender=config('SENDER_MAIL'),
-                psw=config('PASSWORD'),
+                content_text=log_data
             )
 
     def process_log(self, log_data: dict, company_name: str):
