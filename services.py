@@ -139,24 +139,39 @@ class Service:
     def consult_filtered_logs(self, data: dict):
         query = {}
 
-        if 'company_id' in data:
-            query['company_id'] = data['company_id']
-        if 'level' in data:
-            query['level'] = data['level']
-        if 'user' in data:
-            query['user.name'] = data['user']
-        if 'tags' in data:
-            query['tags'] = {'$in': data['tags']}
-        if 'start_date' in data and 'end_date' in data:
-            query['timestamp'] = {
-                '$gte': data['start_date'],
-                '$lte': data['end_date']
+        if data.get('company_id'):
+            query['company_id'] = data['company_id'].strip() or None
+        if data.get('level'):
+            query['log.level'] = data['level'].strip() or None
+        if data.get('user'):
+            query['log.user.name'] = data['user'].strip() or None
+        if data.get('tags'):
+            valid_tags = [t for t in data['tags'] if t.strip()]
+            if valid_tags:
+                query['log.tags'] = {'$in': valid_tags}
+        if data.get('start_date') and data.get('end_date'):
+            start_dt = data['start_date'] if isinstance(data['start_date'], datetime) else datetime.fromisoformat(
+                data['start_date'].replace("Z", "+00:00"))
+            end_dt = data['end_date'] if isinstance(data['end_date'], datetime) else datetime.fromisoformat(
+                data['end_date'].replace("Z", "+00:00"))
+
+
+            query['received_at'] = {
+                '$gte': start_dt,
+                '$lte': end_dt
             }
 
-        if not query:
-            raise ValueError('No filters provided for log search')
+        # if not query:
+        #     raise ValueError('No filters provided for log search')
+        print(query)
 
         result = self.nosql.search_log_in_db(query)
+        flattened = []
+        for r in result:
+            log = r.get('log', {})
+            log['company_id'] = r.get('company_id')
+            log['company_name'] = r.get('company_name')
+            flattened.append(log)
 
-        return result
+        return flattened
     

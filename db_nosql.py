@@ -76,7 +76,10 @@ class Nosql:
     def search_log_in_db(self, filters):
         try:
             collection = self.db[config('COLLECTION_LOGS')]
+            print(collection)
             result = list(collection.find(filters))
+            for doc in collection.find({}, {"log.timestamp": 1}).limit(5):
+                print(doc)
             return result
         except Exception:
             raise
