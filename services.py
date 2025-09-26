@@ -157,7 +157,6 @@ class Service:
             end_dt = data['end_date'] if isinstance(data['end_date'], datetime) else datetime.fromisoformat(
                 data['end_date'].replace("Z", "+00:00"))
 
-
             query['received_at'] = {
                 '$gte': start_dt,
                 '$lte': end_dt
