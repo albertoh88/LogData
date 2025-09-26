@@ -1,3 +1,5 @@
+import json
+
 import jwt
 import smtplib
 import uuid
@@ -39,7 +41,7 @@ class Service:
         msg['To'] = addressee
         msg['Subject'] = subject
 
-        msg.attach(MIMEText(content_text, 'plain'))
+        msg.attach(MIMEText(json.dumps(content_text, indent=2), 'plain'))
 
         with smtplib.SMTP('sandbox.smtp.mailtrap.io', 587) as server:
             server.starttls()
@@ -155,15 +157,10 @@ class Service:
             end_dt = data['end_date'] if isinstance(data['end_date'], datetime) else datetime.fromisoformat(
                 data['end_date'].replace("Z", "+00:00"))
 
-
             query['received_at'] = {
                 '$gte': start_dt,
                 '$lte': end_dt
             }
-
-        # if not query:
-        #     raise ValueError('No filters provided for log search')
-        print(query)
 
         result = self.nosql.search_log_in_db(query)
         flattened = []
