@@ -1,4 +1,6 @@
 import unittest
+from types import SimpleNamespace
+
 import jwt
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -98,27 +100,30 @@ class TestServices(unittest.TestCase):
 
         self.assertEqual(token, 'token_mocker')
 
+    @patch.dict('os.environ', {'MAILTRAP_USER': 'fake_user', 'MAILTRAP_PASSWORD': 'fake_pass'})
     @patch('services.smtplib.SMTP')
     def test_send_email(self, mock_smtp):
         subject = 'Teste Subject'
         addressee = 'receiver@example.com'
         content_text = 'Hello, this is a test.'
         sender = 'sender@example.com'
-        psw = 'dummy_password'
 
         mock_smtp_instance = MagicMock()
         mock_smtp.return_value.__enter__.return_value = mock_smtp_instance
 
-        self.service.send_email(subject, addressee, content_text, sender, psw)
+        self.service.send_email(subject, addressee, content_text, sender)
 
-        mock_smtp.assert_called_with('smtp.gmail.com', 465)
-        mock_smtp_instance.login.assert_called_once_with(sender, psw)
-        mock_smtp_instance.send_message.assert_called_once()
+        mock_smtp.assert_called_with('sandbox.smtp.mailtrap.io', 587)
+        mock_smtp_instance.login.assert_called_once_with('fake_user', 'fake_pass')
+        mock_smtp_instance.sendmail.assert_called_once()
 
-        msg = mock_smtp_instance.send_message.call_args[0][0]
-        self.assertEqual(msg['Subject'], subject)
-        self.assertEqual(msg['To'], addressee)
-        self.assertEqual(msg['From'], sender)
+        args, kwargs = mock_smtp_instance.sendmail.call_args
+        from_addr = args[0]
+        to_addr = args[1]
+        raw_msg = args[2]
+
+        self.assertEqual(from_addr, sender)
+        self.assertEqual(to_addr, addressee)
 
     @patch('services.config')
     @patch('services.Service.send_email')
@@ -138,8 +143,6 @@ class TestServices(unittest.TestCase):
         self.assertEqual(kwargs['addressee'], 'user@example.com')
         self.assertIn('token123', kwargs['content_text'])
         self.assertIn('Valid for 15 minutes', kwargs['content_text'])
-        self.assertEqual(kwargs['sender'], 'test@example.com')
-        self.assertEqual(kwargs['psw'], '1234')
 
     def test_verify_registration_token_valido(self):
         result = self.service.verify_registration_token(self.token_valido)
@@ -235,24 +238,27 @@ class TestServices(unittest.TestCase):
         self.assertEqual(cm.exception.status_code, 400)
         self.assertTrue(cm.exception.detail.startswith('Invalid public key'))
 
+    @patch('services.Nosql')
     @patch('services.Service.validate_public_key')
     @patch('services.uuid.uuid4')
-    def test_register_company(self, mock_uuid, mock_validate):
+    def test_register_company(self, mock_uuid, mock_validate, mock_nosql):
         mock_uuid.return_value = uuid.UUID('12345678-1234-5678-1234-567812345678')
         mock_validate.return_value = None
 
-        self.service.nosql = MagicMock()
+        mock_nosql_instance = mock_nosql.return_value
 
-        data = {
-            'company_public_key': 'public_key_example',
-            'company_name': 'MyCompany',
-            'alert_emails': ['alert1@example.com', 'alert2@example.com']
-        }
-        result = self.service.register_company(data)
+        service = Service()
+
+        data = SimpleNamespace(
+            company_public_key='public_key_example',
+            company_name='MyCompany',
+            alert_emails=['alert1@example.com', 'alert2@example.com']
+        )
+        result = service.register_company(data)
 
         mock_uuid.assert_called_once()
 
-        self.service.nosql.store_company_in_db.assert_called_once_with(
+        mock_nosql_instance.store_company_in_db.assert_called_once_with(
             company_id='12345678-1234-5678-1234-567812345678',
             public_key='public_key_example',
             company_name='MyCompany',
@@ -279,15 +285,11 @@ class TestServices(unittest.TestCase):
                 subject='Critical Alert - Severe Error Detected.',
                 addressee='a@example.com',
                 content_text=log_data,
-                sender=unittest.mock.ANY,
-                psw=unittest.mock.ANY,
             ),
             unittest.mock.call(
                 subject='Critical Alert - Severe Error Detected.',
                 addressee='b@example.com',
                 content_text=log_data,
-                sender=unittest.mock.ANY,
-                psw=unittest.mock.ANY,
             ),
         ]
         mock_send_email.assert_has_calls(calls, any_order=True)
@@ -300,7 +302,7 @@ class TestServices(unittest.TestCase):
                     'service': 'backend',
                     'level': 'ERROR',
                     'event': {'id': 1, 'description': 'Some event'},
-                    'user': {'id': 1, 'name': 'Alberto'},
+                    'user.name': {'id': 1, 'name': 'Alberto'},
                     'message': 'Something critical happened!',
                     'tags': ['critical', 'urgent']}
 
@@ -342,23 +344,24 @@ class TestServices(unittest.TestCase):
             'start_date': '2024-05-01T00:00:00Z',
             'end_date': '2024-05-30T23:59:59Z',
         }
-        expected_query = {
-            'company_id': '12345',
-            'level': 'ERROR',
-            'user.name': 'Alberto',
-            'tags': {'$in': ['critical', 'urgent']},
-            'timestamp': {
-                '$gte': '2024-05-01T00:00:00Z',
-                '$lte': '2024-05-30T23:59:59Z'
-            }
-        }
 
-        mock_search_log_in_db.return_value = [{'log_id': 1}, {'log_id': 2}]
+        mock_search_log_in_db.return_value = [{'company_id': '12345', 'company_name': 'MyCompany'},
+                                              {'company_id': '12345', 'company_name': 'AnotherCompany'}]
 
         result = self.service.consult_filtered_logs(data)
 
-        mock_search_log_in_db.assert_called_once_with(expected_query)
-        self.assertEqual(result, [{'log_id': 1}, {'log_id': 2}])
+        args, kwargs = mock_search_log_in_db.call_args
+        query_used = args[0]
+
+        assert query_used['company_id'] == '12345'
+        assert query_used['log.level'] == 'ERROR'
+        assert query_used['log.user.name'] == 'Alberto'
+        assert query_used['log.tags'] == {'$in': ['critical', 'urgent']}
+        assert query_used['received_at']['$gte'] == datetime(2024, 5, 1 ,0, 0, tzinfo=timezone.utc)
+        assert query_used['received_at']['$lte'] == datetime(2024, 5, 30, 23, 59, 59, tzinfo=timezone.utc)
+
+        self.assertEqual(result, [{'company_id': '12345', 'company_name': 'MyCompany'},
+                                              {'company_id': '12345', 'company_name': 'AnotherCompany'}])
 
     @patch('services.Nosql.search_log_in_db')
     def test_consult_filtered_logs_builds_partial_query(self, mock_search_log_in_db):
@@ -369,16 +372,18 @@ class TestServices(unittest.TestCase):
         }
         expected_query = {
             'company_id': '12345',
-            'level': 'ERROR',
-            'user.name': 'Alberto'
+            'log.level': 'ERROR',
+            'log.user.name': 'Alberto'
         }
 
-        mock_search_log_in_db.return_value = [{'log_id': 1}, {'log_id': 2}]
+        mock_search_log_in_db.return_value = [{'company_id': '12345', 'company_name': 'MyCompany'},
+                                              {'company_id': '12345', 'company_name': 'AnotherCompany'}]
 
         result = self.service.consult_filtered_logs(data)
 
         mock_search_log_in_db.assert_called_once_with(expected_query)
-        self.assertEqual(result, [{'log_id': 1}, {'log_id': 2}])
+        self.assertEqual(result, [{'company_id': '12345', 'company_name': 'MyCompany'},
+                                              {'company_id': '12345', 'company_name': 'AnotherCompany'}])
 
     @patch('services.Nosql.search_log_in_db')
     def test_consult_filtered_logs_with_no_filters_returns_all(self, _):

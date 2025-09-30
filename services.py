@@ -139,6 +139,8 @@ class Service:
         return {'message': 'Log stored successfully.'}
 
     def consult_filtered_logs(self, data: dict):
+        if not data:
+            raise ValueError('No filters provided for log search')
         query = {}
 
         if data.get('company_id'):
