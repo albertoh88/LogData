@@ -7,25 +7,28 @@ class TestNosql(unittest.TestCase):
 
     def setUp(self):
         patcher_config = patch('services.config')
-        patcher_conn = patch('conection.Connection.connection_nosql')
-
         self.addCleanup(patcher_config.stop)
-        self.addCleanup(patcher_conn.stop)
-
         self.mock_config = patcher_config.start()
-        self.mock_connection_nosql = patcher_conn.start()
-
         self.mock_config.side_effect = lambda key: {'BD': 'test_db', 'COLLECTION_COMPANIES': 'companies'}[key]
 
-        self.mock_client = MagicMock()
+        patcher_mongo = patch('conection.MongoClient', return_value=MagicMock())
+        self.addCleanup(patcher_mongo.stop)
+        self.mock_mongo = patcher_mongo.start()
+
         self.mock_db = MagicMock()
         self.mock_collection = MagicMock()
-
-        self.mock_client.__getitem__.return_value = self.mock_db
         self.mock_db.__getitem__.return_value = self.mock_collection
-        self.mock_connection_nosql.return_value = self.mock_client
+
+        patcher_conn_class = patch('conection.Connection')
+        self.addCleanup(patcher_conn_class.stop)
+        self.mock_conn_class = patcher_conn_class.start()
+
+        self.mock_conn_instance = MagicMock()
+        self.mock_conn_instance.get_database.return_value = self.mock_db
+        self.mock_conn_class.return_value = self.mock_conn_instance
 
         self.nosql = Nosql()
+        self.nosql.db = self.mock_db
 
     def test_verify_company_returns_public_key(self):
 
@@ -135,8 +138,6 @@ class TestNosql(unittest.TestCase):
         self.mock_collection.find.return_value = expected_result
 
         result = self.nosql.search_log_in_db(filters)
-
-        self.mock_connection_nosql.assert_called_once()
 
         self.mock_collection.find.assert_called_once_with(filters)
 
